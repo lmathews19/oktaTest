@@ -13,6 +13,7 @@ namespace IAMOnline.Plugin
     {
         private readonly SamlOptions _options;
         private readonly ILogger<SamlService> _logger;
+        private static readonly HashSet<string> ProcessedAssertionIds = new HashSet<string>();
 
         public SamlService(SamlOptions options, ILogger<SamlService> logger)
         {
@@ -149,20 +150,9 @@ namespace IAMOnline.Plugin
                 nsManager.AddNamespace("samlp", "urn:oasis:names:tc:SAML:2.0:protocol");
                 nsManager.AddNamespace("saml", "urn:oasis:names:tc:SAML:2.0:assertion");
                 nsManager.AddNamespace("ds", "http://www.w3.org/2000/09/xmldsig#");
+                nsManager.AddNamespace("saml2", "urn:oasis:names:tc:SAML:2.0:assertion");
 
-                // Extract and log attributes from the SAML Response element
-                var responseNode = xmlDoc.SelectSingleNode("/samlp:Response", nsManager);
-                if (responseNode != null && responseNode.Attributes != null)
-                {
-                    foreach (XmlAttribute attr in responseNode.Attributes)
-                    {
-                        _logger.LogInformation("SAML Response A1 Attribute: {AttributeName} = {AttributeValue}", attr.Name, attr.Value);
-                    }
-                }
-                else
-                {
-                    _logger.LogWarning("No SAML Response element found or it has no attributes.");
-                }
+
 
                 // Verify response status
                 var statusNode = xmlDoc.SelectSingleNode("//samlp:StatusCode", nsManager);
@@ -181,11 +171,8 @@ namespace IAMOnline.Plugin
                     throw new Exception("Invalid issuer in SAML response");
                 }
 
-                // Verify signature if required
-                if (_options.WantAssertionsSigned && _options.IdpCertificate != null)
-                {
-                    ValidateSignature(xmlDoc);
-                }
+                // Validate assertion
+                ValidateAssertion(xmlDoc, nsManager);
 
                 // Extract assertions and claims
                 return ExtractClaims(xmlDoc, nsManager);
@@ -197,7 +184,7 @@ namespace IAMOnline.Plugin
             }
         }
 
-        private void ValidateSignature(XmlDocument xmlDoc)
+        private void ValidateSignature(XmlDocument xmlDoc, XmlNamespaceManager nsManager)
         {
             _logger.LogInformation("Validating SAML Response signature");
 
@@ -212,12 +199,6 @@ namespace IAMOnline.Plugin
             {
                 throw new InvalidOperationException("Failed to extract RSA public key from IdP certificate");
             }
-
-            // Set up namespaces for XPath
-            var nsManager = new XmlNamespaceManager(xmlDoc.NameTable);
-            nsManager.AddNamespace("samlp", "urn:oasis:names:tc:SAML:2.0:protocol");
-            nsManager.AddNamespace("saml", "urn:oasis:names:tc:SAML:2.0:assertion");
-            nsManager.AddNamespace("ds", "http://www.w3.org/2000/09/xmldsig#");
 
             // Look for signature in the response or assertion
             var signatureNode = xmlDoc.SelectSingleNode("//ds:Signature", nsManager);
@@ -242,36 +223,92 @@ namespace IAMOnline.Plugin
             _logger.LogInformation("SAML Response signature validated successfully");
         }
 
+        private void ValidateAssertion(XmlDocument xmlDoc, XmlNamespaceManager nsManager)
+        {
+            // Verify signature if certificate is available
+            if (_options.IdpCertificate != null)
+            {
+                ValidateSignature(xmlDoc, nsManager);
+            }
+
+            // 1. Get Assertion node
+            var assertionNode = xmlDoc.SelectSingleNode("//saml2:Assertion", nsManager);
+            if (assertionNode == null)
+                throw new Exception("No Assertion found in SAML response.");
+
+            // 1. Replay Attack Protection
+            var assertionId = assertionNode.Attributes?["ID"]?.Value;
+            if (string.IsNullOrEmpty(assertionId))
+                throw new Exception("Assertion ID missing.");
+            lock (ProcessedAssertionIds)
+            {
+                if (!ProcessedAssertionIds.Add(assertionId))
+                    throw new Exception("Replay attack detected: Assertion ID already processed.");
+            }
+
+            // 2. Assertion Expiry and NotBefore/NotOnOrAfter
+            var conditionsNode = assertionNode.SelectSingleNode("saml2:Conditions", nsManager);
+            if (conditionsNode == null)
+                throw new Exception("No Conditions element in Assertion.");
+
+            var notBeforeStr = conditionsNode.Attributes?["NotBefore"]?.Value;
+            var notOnOrAfterStr = conditionsNode.Attributes?["NotOnOrAfter"]?.Value;
+            var now = DateTime.UtcNow;
+            var skew = _options.MaxClockSkew;
+
+            if (!string.IsNullOrEmpty(notBeforeStr) &&
+                DateTime.TryParse(notBeforeStr, null, System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out var notBefore))
+            {
+                if (now + skew < notBefore)
+                    throw new Exception("Assertion is not yet valid (NotBefore).");
+            }
+            if (!string.IsNullOrEmpty(notOnOrAfterStr) &&
+                DateTime.TryParse(notOnOrAfterStr, null, System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out var notOnOrAfter))
+            {
+                if (now - skew >= notOnOrAfter)
+                    throw new Exception("Assertion has expired (NotOnOrAfter).");
+            }
+
+            // 3. Audience Restriction
+            var audienceNode = conditionsNode.SelectSingleNode("saml2:AudienceRestriction/saml2:Audience", nsManager);
+            if (audienceNode == null || audienceNode.InnerText != _options.SpEntityId)
+                throw new Exception("Audience restriction failed.");
+
+            // 4. Recipient/ACS URL Validation
+            var recipientNode = assertionNode.SelectSingleNode("saml2:Subject/saml2:SubjectConfirmation/saml2:SubjectConfirmationData", nsManager);
+            var recipient = recipientNode?.Attributes?["Recipient"]?.Value;
+            if (recipient != _options.AssertionConsumerServiceUrl)
+                throw new Exception("Recipient does not match ACS URL.");
+
+            // 5. InResponseTo Validation (optional, if you track request IDs)
+            // var inResponseTo = recipientNode?.Attributes?["InResponseTo"]?.Value;
+            // if (!IsValidInResponseTo(inResponseTo)) throw new Exception("Invalid InResponseTo.");
+
+            // 6. Clock Skew handled above
+
+            // 7. Session Fixation: Regenerate session in your controller after authentication
+        }
+
         private ClaimsPrincipal ExtractClaims(XmlDocument xmlDoc, XmlNamespaceManager nsManager)
         {
             _logger.LogInformation("Extracting claims from SAML Response");
-
-            // Add the saml2 namespace for assertion elements if not already present
-            nsManager.AddNamespace("saml2", "urn:oasis:names:tc:SAML:2.0:assertion");
-
-            // Log the entire Assertion XML
-            var assertionNode = xmlDoc.SelectSingleNode("//saml2:Assertion", nsManager);
-            if (assertionNode != null)
-            {
-                _logger.LogInformation("SAML Assertion XML: {AssertionXml}", assertionNode.OuterXml);
-            }
 
             // Extract and log AuthnStatement attributes (AuthnInstant, SessionIndex, SessionNotOnOrAfter)
             var authnStatementNode = xmlDoc.SelectSingleNode("//saml2:AuthnStatement", nsManager);
             if (authnStatementNode != null && authnStatementNode.Attributes != null)
             {
-                var authnInstant = authnStatementNode.Attributes["AuthnInstant"]?.Value;
+/*                var authnInstant = authnStatementNode.Attributes["AuthnInstant"]?.Value;
                 var sessionIndex = authnStatementNode.Attributes["SessionIndex"]?.Value;
                 var sessionNotOnOrAfter = authnStatementNode.Attributes["SessionNotOnOrAfter"]?.Value;
 
                 _logger.LogInformation("AuthnStatement AuthnInstant: {AuthnInstant}", authnInstant);
                 _logger.LogInformation("AuthnStatement SessionIndex: {SessionIndex}", sessionIndex);
                 _logger.LogInformation("AuthnStatement SessionNotOnOrAfter: {SessionNotOnOrAfter}", sessionNotOnOrAfter);
-
+*/
                 // Optionally, log all attributes
                 foreach (XmlAttribute attr in authnStatementNode.Attributes)
                 {
-                    _logger.LogInformation("AuthnStatement Attribute: {AttributeName} = {AttributeValue}", attr.Name, attr.Value);
+                    _logger.LogInformation("AuthnStatement Attribute: {AttributeName} = <value>", attr.Name);
                 }
             }
             else
@@ -287,9 +324,8 @@ namespace IAMOnline.Plugin
             {
                 string nameId = nameIdNode.InnerText;
                 claims.Add(new Claim(ClaimTypes.NameIdentifier, nameId));
-                claims.Add(new Claim(ClaimTypes.Name, nameId));
 
-                _logger.LogInformation("Found NameID: {NameId}", nameId);
+                _logger.LogInformation("Found NameID: <userid>");
             }
 
 
