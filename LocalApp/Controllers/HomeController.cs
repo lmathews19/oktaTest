@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using LocalApp.Models;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace LocalApp.Controllers
 {
@@ -15,7 +16,8 @@ namespace LocalApp.Controllers
 
         public IActionResult Index()
         {
-            return View();
+            var claims = User.Claims.ToList();
+            return View(claims);
         }
 
         public IActionResult Privacy()

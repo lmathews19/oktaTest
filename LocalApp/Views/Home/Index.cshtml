@@ -1,14 +1,40 @@
-﻿@{
+﻿@model IEnumerable<System.Security.Claims.Claim>
+
+@{
     ViewData["Title"] = "Home Page";
 }
 
-<div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Login to use the app <a href="https://dev-90135031.okta.com/app/dev-90135031_mvclocalapp_1/exkosgq6hg2KlaDLn5d7/sso/saml">Login</a>.</p>
+<h2>User Claims</h2>
+@if (Model != null && Model.Any())
+{
+    <table class="table table-bordered">
+        <thead>
+            <tr>
+                <th>Type</th>
+                <th>Value</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var claim in Model)
+        {
+            <tr>
+                <td>@claim.Type</td>
+                <td>@claim.Value</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+else
+{
+    <div class="text-center">
+        <h1 class="display-4">Welcome</h1>
 
-    <div class="mt-4">
-        <a href="@Url.Action("Login", "Auth")" class="btn btn-primary">
-            Login with Okta
-        </a>
+        <div class="mt-4">
+            <a href="@Url.Action("Login", "Auth")" class="btn btn-primary">
+                Login with Okta
+            </a>
+        </div>
     </div>
-</div>
+
+}

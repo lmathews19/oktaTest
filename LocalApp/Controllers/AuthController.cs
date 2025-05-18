@@ -96,9 +96,16 @@ namespace LocalApp.Controllers
             // Sign out locally
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
 
-            // For a complete solution, you would also need to redirect to Okta's logout endpoint
-            // This simple example only performs local logout
+            // Clear authentication (if using cookies authentication)
+            //HttpContext.SignOutAsync();
 
+            // Remove all cookies
+            foreach (var cookie in Request.Cookies.Keys)
+            {
+                Response.Cookies.Delete(cookie);
+            }
+
+            // Redirect to home or login page
             return RedirectToAction("Index", "Home");
         }
     }
