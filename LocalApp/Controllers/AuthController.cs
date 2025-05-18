@@ -6,10 +6,10 @@ namespace LocalApp.Controllers
 {
     public class AuthController : Controller
     {
-        private readonly SamlService _samlService;
+        private readonly IAMOnline.Plugin.SamlService _samlService;
         private readonly ILogger<AuthController> _logger;
 
-        public AuthController(SamlService samlService, ILogger<AuthController> logger)
+        public AuthController(IAMOnline.Plugin.SamlService samlService, ILogger<AuthController> logger)
         {
             _samlService = samlService;
             _logger = logger;

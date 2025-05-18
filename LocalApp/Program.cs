@@ -9,13 +9,13 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllersWithViews();
 
 // Add CertificateLoader service
-builder.Services.AddSingleton<LocalApp.CertificateLoader>();
+builder.Services.AddSingleton<IAMOnline.Plugin.CertificateLoader>();
 
 // Configure SAML Options
 builder.Services.AddSingleton(serviceProvider =>
 {
-    var logger = serviceProvider.GetRequiredService<ILogger<LocalApp.CertificateLoader>>();
-    var certificateLoader = new LocalApp.CertificateLoader(logger);
+    var logger = serviceProvider.GetRequiredService<ILogger<IAMOnline.Plugin.CertificateLoader>>();
+    var certificateLoader = new IAMOnline.Plugin.CertificateLoader(logger);
 
     // Get paths from configuration
     var idpCertPath = Path.Combine(builder.Environment.ContentRootPath, "Certificates", "idp-certificate.crt");
@@ -45,7 +45,7 @@ builder.Services.AddSingleton(serviceProvider =>
     }
 
     // Create and configure SAML options
-    return new SamlOptions
+    return new IAMOnline.Plugin.SamlOptions
     {
         IdpEntityId = builder.Configuration["SamlOptions:IdpEntityId"] ?? "http://www.okta.com/exampleEntityId",
         IdpSsoUrl = builder.Configuration["SamlOptions:IdpSsoUrl"] ?? "https://your-okta-domain.okta.com/app/exampleapp/exampleappid/sso/saml",
@@ -59,7 +59,7 @@ builder.Services.AddSingleton(serviceProvider =>
     };
 });
 // Add SAML Service
-builder.Services.AddSingleton<LocalApp.SamlService>();
+builder.Services.AddSingleton<IAMOnline.Plugin.SamlService>();
 
 // Add Cookie Authentication
 builder.Services.AddAuthentication(options =>

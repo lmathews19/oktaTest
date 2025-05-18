@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.WebUtilities;
+﻿using Microsoft.Extensions.Logging;
 using System.IO.Compression;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -7,7 +7,7 @@ using System.Security.Cryptography.Xml;
 using System.Text;
 using System.Xml;
 
-namespace LocalApp
+namespace IAMOnline.Plugin
 {
     public class SamlService
     {
@@ -83,7 +83,7 @@ namespace LocalApp
             var base64String = Convert.ToBase64String(compressedStream.ToArray());
 
             // URL encode
-            return WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(base64String));
+            return Base64UrlEncode(Encoding.UTF8.GetBytes(base64String));
         }
 
         private string SignSamlRequest(string samlRequest)
@@ -149,6 +149,20 @@ namespace LocalApp
                 nsManager.AddNamespace("samlp", "urn:oasis:names:tc:SAML:2.0:protocol");
                 nsManager.AddNamespace("saml", "urn:oasis:names:tc:SAML:2.0:assertion");
                 nsManager.AddNamespace("ds", "http://www.w3.org/2000/09/xmldsig#");
+
+                // Extract and log attributes from the SAML Response element
+                var responseNode = xmlDoc.SelectSingleNode("/samlp:Response", nsManager);
+                if (responseNode != null && responseNode.Attributes != null)
+                {
+                    foreach (XmlAttribute attr in responseNode.Attributes)
+                    {
+                        _logger.LogInformation("SAML Response A1 Attribute: {AttributeName} = {AttributeValue}", attr.Name, attr.Value);
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning("No SAML Response element found or it has no attributes.");
+                }
 
                 // Verify response status
                 var statusNode = xmlDoc.SelectSingleNode("//samlp:StatusCode", nsManager);
@@ -232,6 +246,39 @@ namespace LocalApp
         {
             _logger.LogInformation("Extracting claims from SAML Response");
 
+            // Add the saml2 namespace for assertion elements if not already present
+            nsManager.AddNamespace("saml2", "urn:oasis:names:tc:SAML:2.0:assertion");
+
+            // Log the entire Assertion XML
+            var assertionNode = xmlDoc.SelectSingleNode("//saml2:Assertion", nsManager);
+            if (assertionNode != null)
+            {
+                _logger.LogInformation("SAML Assertion XML: {AssertionXml}", assertionNode.OuterXml);
+            }
+
+            // Extract and log AuthnStatement attributes (AuthnInstant, SessionIndex, SessionNotOnOrAfter)
+            var authnStatementNode = xmlDoc.SelectSingleNode("//saml2:AuthnStatement", nsManager);
+            if (authnStatementNode != null && authnStatementNode.Attributes != null)
+            {
+                var authnInstant = authnStatementNode.Attributes["AuthnInstant"]?.Value;
+                var sessionIndex = authnStatementNode.Attributes["SessionIndex"]?.Value;
+                var sessionNotOnOrAfter = authnStatementNode.Attributes["SessionNotOnOrAfter"]?.Value;
+
+                _logger.LogInformation("AuthnStatement AuthnInstant: {AuthnInstant}", authnInstant);
+                _logger.LogInformation("AuthnStatement SessionIndex: {SessionIndex}", sessionIndex);
+                _logger.LogInformation("AuthnStatement SessionNotOnOrAfter: {SessionNotOnOrAfter}", sessionNotOnOrAfter);
+
+                // Optionally, log all attributes
+                foreach (XmlAttribute attr in authnStatementNode.Attributes)
+                {
+                    _logger.LogInformation("AuthnStatement Attribute: {AttributeName} = {AttributeValue}", attr.Name, attr.Value);
+                }
+            }
+            else
+            {
+                _logger.LogWarning("No AuthnStatement found in SAML Assertion.");
+            }
+
             var claims = new List<Claim>();
 
             // Extract NameID
@@ -245,30 +292,6 @@ namespace LocalApp
                 _logger.LogInformation("Found NameID: {NameId}", nameId);
             }
 
-            // Extract attributes
-            var attributeNodes = xmlDoc.SelectNodes("//saml:AttributeStatement/saml:Attribute", nsManager);
-            if (attributeNodes != null)
-            {
-                foreach (XmlNode attribute in attributeNodes)
-                {
-                    string? attributeName = attribute.Attributes?["Name"]?.Value;
-                    if (string.IsNullOrEmpty(attributeName))
-                        continue;
-
-                    var attributeValues = attribute.SelectNodes("saml:AttributeValue", nsManager);
-                    if (attributeValues != null)
-                    {
-                        foreach (XmlNode valueNode in attributeValues)
-                        {
-                            string attributeValue = valueNode.InnerText;
-                            string claimType = MapToClaimType(attributeName);
-                            claims.Add(new Claim(claimType, attributeValue));
-
-                            _logger.LogInformation("Found claim: {ClaimType} = {ClaimValue}", claimType, attributeValue);
-                        }
-                    }
-                }
-            }
 
             // Create identity and principal
             var identity = new ClaimsIdentity(claims, "SAML2");
@@ -287,6 +310,12 @@ namespace LocalApp
                 "role" or "http://schemas.microsoft.com/ws/2008/06/identity/claims/role" => ClaimTypes.Role,
                 _ => attributeName // Use original name if no mapping exists
             };
+        }
+
+        private static string Base64UrlEncode(byte[] input)
+        {
+            var base64 = Convert.ToBase64String(input);
+            return base64.Replace("+", "-").Replace("/", "_").TrimEnd('=');
         }
     }
 }

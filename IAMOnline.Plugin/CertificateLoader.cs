@@ -1,6 +1,7 @@
-﻿using System.Security.Cryptography.X509Certificates;
+﻿using Microsoft.Extensions.Logging;
+using System.Security.Cryptography.X509Certificates;
 
-namespace LocalApp
+namespace IAMOnline.Plugin
 {
     public class CertificateLoader
     {

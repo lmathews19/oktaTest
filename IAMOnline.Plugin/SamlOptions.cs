@@ -1,6 +1,6 @@
 ﻿using System.Security.Cryptography.X509Certificates;
 
-namespace LocalApp
+namespace IAMOnline.Plugin
 {
     public class SamlOptions
     {
