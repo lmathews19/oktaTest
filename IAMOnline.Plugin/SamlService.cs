@@ -269,14 +269,6 @@ namespace IAMOnline.Plugin
             var authnStatementNode = xmlDoc.SelectSingleNode("//saml2:AuthnStatement", nsManager);
             if (authnStatementNode != null && authnStatementNode.Attributes != null)
             {
-/*                var authnInstant = authnStatementNode.Attributes["AuthnInstant"]?.Value;
-                var sessionIndex = authnStatementNode.Attributes["SessionIndex"]?.Value;
-                var sessionNotOnOrAfter = authnStatementNode.Attributes["SessionNotOnOrAfter"]?.Value;
-
-                _logger.LogInformation("AuthnStatement AuthnInstant: {AuthnInstant}", authnInstant);
-                _logger.LogInformation("AuthnStatement SessionIndex: {SessionIndex}", sessionIndex);
-                _logger.LogInformation("AuthnStatement SessionNotOnOrAfter: {SessionNotOnOrAfter}", sessionNotOnOrAfter);
-*/
                 // Optionally, log all attributes
                 foreach (XmlAttribute attr in authnStatementNode.Attributes)
                 {
