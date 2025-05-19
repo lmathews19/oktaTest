@@ -23,50 +23,46 @@ namespace IAMOnline.Plugin
 
         public string BuildAuthnRequest(string? relayState = null)
         {
-            return $"{_options.IdpSsoUrl}";
+            // return $"{_options.IdpSsoUrl}";
 
-            /*            _logger.LogInformation("Building SAML AuthnRequest");
+            _logger.LogInformation("Building SAML AuthnRequest");
 
-                        string requestId = "_" + Guid.NewGuid().ToString();
-                        string issueInstant = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+            string requestId = "_" + Guid.NewGuid().ToString();
+            string issueInstant = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
 
-                        // Build the SAML AuthnRequest XML
-                        var sb = new StringBuilder();
-                        sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
-                        sb.Append("<samlp:AuthnRequest xmlns:samlp=\"urn:oasis:names:tc:SAML:2.0:protocol\" ");
-                        sb.Append("xmlns:saml=\"urn:oasis:names:tc:SAML:2.0:assertion\" ");
-                        sb.Append($"ID=\"{requestId}\" Version=\"2.0\" ");
-                        sb.Append($"IssueInstant=\"{issueInstant}\" ");
-                        sb.Append("ProtocolBinding=\"urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST\" ");
-                        sb.Append($"AssertionConsumerServiceURL=\"{_options.AssertionConsumerServiceUrl}\" ");
-                        sb.Append($"Destination=\"{_options.IdpSsoUrl}\">");
-                        sb.Append($"<saml:Issuer>{_options.SpEntityId}</saml:Issuer>");
-                        sb.Append("<samlp:NameIDPolicy Format=\"urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress\" AllowCreate=\"true\"/>");
-                        sb.Append("</samlp:AuthnRequest>");
+            // Build the SAML AuthnRequest XML
+            var sb = new StringBuilder();
+            //sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+            sb.Append("<samlp:AuthnRequest xmlns:samlp=\"urn:oasis:names:tc:SAML:2.0:protocol\" ");
+            sb.Append("xmlns:saml=\"urn:oasis:names:tc:SAML:2.0:assertion\" ");
+            sb.Append($"ID=\"{requestId}\" Version=\"2.0\" ");
+            sb.Append($"IssueInstant=\"{issueInstant}\" ");
+            sb.Append("ProtocolBinding=\"urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST\" ");
+            sb.Append($"AssertionConsumerServiceURL=\"{_options.AssertionConsumerServiceUrl}\" ");
+            sb.Append($"Destination=\"{_options.IdpSsoUrl}\">");
+            sb.Append($"<saml:Issuer xmlns:saml=\"urn:oasis:names:tc:SAML:2.0:assertion\">{_options.IdpEntityId}</saml:Issuer>");
+            sb.Append("<samlp:NameIDPolicy Format=\"urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress\" AllowCreate=\"true\"/>");
+            sb.Append("</samlp:AuthnRequest>");
 
-                        string request = sb.ToString();
+            string request = sb.ToString();
 
-                        // Sign the request if certificate is provided
-                        if (_options.SpSigningCertificate != null)
-                        {
-                            _logger.LogInformation("Signing SAML AuthnRequest");
-                            request = SignSamlRequest(request);
-                        }
+            MemoryStream memoryStream = new MemoryStream();
+            StreamWriter writer = new StreamWriter(new DeflateStream(memoryStream, CompressionMode.Compress, true), new UTF8Encoding(false));
+            writer.Write(request);
+            writer.Close();
+            string result = Convert.ToBase64String(memoryStream.GetBuffer(), 0, (int)memoryStream.Length, Base64FormattingOptions.None);
 
-                        // Encode the request for HTTP-Redirect binding
-                        string encodedRequest = EncodeRequest(request);
+            // Build the full redirect URL
+            string redirectUrl = $"{_options.IdpSsoUrl}?SAMLRequest={Uri.EscapeDataString(result)}";
 
-                        // Build the full redirect URL
-                        string redirectUrl = $"{_options.IdpSsoUrl}";//?SAMLRequest={encodedRequest}";
+            // Add RelayState if provided
+            if (!string.IsNullOrEmpty(relayState))
+            {
+                redirectUrl += $"&RelayState={Uri.EscapeDataString(relayState)}";
+            }
 
-                        // Add RelayState if provided
-                        if (!string.IsNullOrEmpty(relayState))
-                        {
-                            redirectUrl += $"&RelayState={Uri.EscapeDataString(relayState)}";
-                        }
-
-                        _logger.LogInformation("SAML AuthnRequest built successfully");
-                        return redirectUrl;*/
+            _logger.LogInformation($"SAML AuthnRequest built successfully");
+            return redirectUrl;
         }
 
         private string EncodeRequest(string request)
