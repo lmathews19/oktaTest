@@ -1,7 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using System.IO.Compression;
 using System.Security.Claims;
-using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Security.Cryptography.Xml;
 using System.Text;
@@ -65,23 +64,6 @@ namespace IAMOnline.Plugin
             return redirectUrl;
         }
 
-        private string EncodeRequest(string request)
-        {
-            var bytes = Encoding.UTF8.GetBytes(request);
-
-            // Deflate compress
-            using var compressedStream = new MemoryStream();
-            using (var deflateStream = new DeflateStream(compressedStream, CompressionMode.Compress, true))
-            {
-                deflateStream.Write(bytes, 0, bytes.Length);
-            }
-
-            // Convert to Base64
-            var base64String = Convert.ToBase64String(compressedStream.ToArray());
-
-            // URL encode
-            return Base64UrlEncode(Encoding.UTF8.GetBytes(base64String));
-        }
 
         private string SignSamlRequest(string samlRequest)
         {
@@ -276,13 +258,7 @@ namespace IAMOnline.Plugin
             if (recipient != _options.AssertionConsumerServiceUrl)
                 throw new Exception("Recipient does not match ACS URL.");
 
-            // 5. InResponseTo Validation (optional, if you track request IDs)
-            // var inResponseTo = recipientNode?.Attributes?["InResponseTo"]?.Value;
-            // if (!IsValidInResponseTo(inResponseTo)) throw new Exception("Invalid InResponseTo.");
-
-            // 6. Clock Skew handled above
-
-            // 7. Session Fixation: Regenerate session in your controller after authentication
+            // 5. Session Fixation: Regenerate session in your controller after authentication
         }
 
         private ClaimsPrincipal ExtractClaims(XmlDocument xmlDoc, XmlNamespaceManager nsManager)
@@ -330,24 +306,5 @@ namespace IAMOnline.Plugin
             return new ClaimsPrincipal(identity);
         }
 
-        private string MapToClaimType(string attributeName)
-        {
-            // Map SAML attribute names to ClaimTypes
-            return attributeName switch
-            {
-                "email" or "emailAddress" or "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress" => ClaimTypes.Email,
-                "givenName" or "firstName" or "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname" => ClaimTypes.GivenName,
-                "surname" or "lastName" or "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname" => ClaimTypes.Surname,
-                "name" or "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name" => ClaimTypes.Name,
-                "role" or "http://schemas.microsoft.com/ws/2008/06/identity/claims/role" => ClaimTypes.Role,
-                _ => attributeName // Use original name if no mapping exists
-            };
-        }
-
-        private static string Base64UrlEncode(byte[] input)
-        {
-            var base64 = Convert.ToBase64String(input);
-            return base64.Replace("+", "-").Replace("/", "_").TrimEnd('=');
-        }
     }
 }
