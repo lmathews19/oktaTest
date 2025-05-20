@@ -11,7 +11,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\IAMOnline.Plugin\IAMOnline.Plugin.csproj" />
+    <ProjectReference Include="..\Okta.Plugin\Okta.Plugin.csproj" />
   </ItemGroup>
 
 </Project>

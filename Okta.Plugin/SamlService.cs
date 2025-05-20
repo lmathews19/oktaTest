@@ -6,7 +6,7 @@ using System.Security.Cryptography.Xml;
 using System.Text;
 using System.Xml;
 
-namespace IAMOnline.Plugin
+namespace Okta.Plugin
 {
     public class SamlService
     {

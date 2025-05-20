@@ -1,7 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using System.Security.Cryptography.X509Certificates;
 
-namespace IAMOnline.Plugin
+namespace Okta.Plugin
 {
     public class CertificateLoader
     {
